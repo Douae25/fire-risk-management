@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: incendie-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: incendie
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./incendie.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 5
+
+  backend:
+    image: douaeaaz253/fire-risk-backend:latest
+    container_name: fire-risk-management-service
+    env_file:
+      - .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/incendie
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - internal
+      - web
+
+  frontend:
+    image: douaeaaz253/fire-risk-frontend:latest
+    container_name: fire-risk-management-frontend
+    depends_on:
+      - backend
+    networks:
+      - web
+
+  nodered:
+    image: douaeaaz253/fire-risk-nodered:latest
+    container_name: fire-risk-management-nodered
+    ports:
+      - "1881:1880"
+    depends_on:
+      - backend
+    volumes:
+      - nodered_data:/data
+    networks:
+      - internal
+      - web
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: root
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - web
+      - internal
+
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - web
+
+  kafka:
+    image: confluentinc/cp-kafka:7.8.3
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_KRAFT_MODE: 'true'
+      CLUSTER_ID: '1L6g7nGhU-eAKfL--X25wo'
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka_kraft:/var/lib/kafka/data
+    networks:
+      - internal
+
+volumes:
+  mysql_data:
+  nodered_data:
+  caddy_data:
+  caddy_config:
+  kafka_kraft:
+
+networks:
+  web:
+  internal:
