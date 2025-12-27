@@ -6,7 +6,7 @@
 
     # Redirection vers phpMyAdmin
     handle_path /phpmyadmin/* {
-        reverse_proxy phpmyadmin:8081
+        reverse_proxy phpmyadmin:80
     }
 
     # Redirection vers Node-RED (retire le préfixe /red)
